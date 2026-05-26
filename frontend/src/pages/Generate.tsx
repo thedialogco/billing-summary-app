@@ -40,17 +40,42 @@ function FileField({
   onChange: (f: File) => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) onChange(dropped);
+  }
+
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       <div
         onClick={() => ref.current?.click()}
-        className="border-2 border-dashed border-gray-300 rounded-lg px-4 py-5 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        className={`border-2 border-dashed rounded-lg px-4 py-6 text-center cursor-pointer transition-colors
+          ${dragging
+            ? "border-blue-500 bg-blue-50"
+            : file
+              ? "border-green-400 bg-green-50"
+              : "border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+          }`}
       >
         {file ? (
-          <span className="text-sm text-blue-700 font-medium">{file.name}</span>
+          <div>
+            <div className="text-green-600 text-lg mb-1">✓</div>
+            <span className="text-sm text-green-700 font-medium">{file.name}</span>
+            <p className="text-xs text-gray-400 mt-1">Click or drag to replace</p>
+          </div>
         ) : (
-          <span className="text-sm text-gray-400">Click to select file</span>
+          <div>
+            <div className="text-gray-300 text-2xl mb-1">⬆</div>
+            <span className="text-sm text-gray-500">Drag & drop or <span className="text-blue-600 font-medium">click to browse</span></span>
+          </div>
         )}
       </div>
       <input

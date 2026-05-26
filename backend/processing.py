@@ -1,4 +1,5 @@
 import io
+import zipfile
 from datetime import date
 from typing import Any
 import openpyxl
@@ -225,7 +226,8 @@ def read_master(file_bytes: bytes) -> list[dict]:
 
 
 def append_to_master(master_bytes: bytes, new_rows: list[dict], invoice_number: int) -> bytes:
-    wb = openpyxl.load_workbook(io.BytesIO(master_bytes))
+    # keep_links=False drops external link references that openpyxl can't round-trip cleanly
+    wb = openpyxl.load_workbook(io.BytesIO(master_bytes), keep_links=False)
     ws = _get_sheet(wb, "Sheet1")
 
     # Detect master column layout so we write into the right columns
@@ -258,7 +260,29 @@ def append_to_master(master_bytes: bytes, new_rows: list[dict], invoice_number: 
 
     buf = io.BytesIO()
     wb.save(buf)
-    return buf.getvalue()
+
+    # Remove calcChain.xml — it becomes stale after appending rows and
+    # causes Excel's "We found a problem" repair dialog on open.
+    raw = buf.getvalue()
+    with zipfile.ZipFile(io.BytesIO(raw), "r") as zin:
+        names = zin.namelist()
+        if "xl/calcChain.xml" not in names:
+            return raw
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in names:
+                if item == "xl/calcChain.xml":
+                    continue
+                if item == "[Content_Types].xml":
+                    content = zin.read(item).decode()
+                    content = content.replace(
+                        '<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>',
+                        ""
+                    )
+                    zout.writestr(item, content)
+                else:
+                    zout.writestr(item, zin.read(item))
+    return out.getvalue()
 
 
 def validate(
