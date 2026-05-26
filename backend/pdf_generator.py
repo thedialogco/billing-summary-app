@@ -194,7 +194,7 @@ def _build_page1(
             person_cells = [_fmt_hrs(td["hours_by_person"].get(p)) for p in personnel_set]
             row = [
                 Paragraph(f"<b>{phase}</b>", ParagraphStyle("pl", fontName=FONT_BOLD, fontSize=FONT_SIZE)) if not phase_shown else "",
-                task,
+                Paragraph(task, ParagraphStyle("tk", fontName=FONT_REG, fontSize=FONT_SIZE)),
                 Paragraph(task_name, ParagraphStyle("tn", fontName=FONT_REG, fontSize=FONT_SIZE, wordWrap="CJK")),
                 *[Paragraph(h, ParagraphStyle("hr", fontName=FONT_REG, fontSize=FONT_SIZE, alignment=TA_CENTER)) for h in person_cells],
                 Paragraph(f"<b>{_fmt_hrs(td['total_hours'])}</b>",
@@ -375,7 +375,7 @@ def _build_page2(
             row_total = sum(inv_data.values())
             row = [
                 Paragraph(f"<b>{phase}</b>", ps_bold) if not phase_shown else "",
-                task,
+                Paragraph(task, ps_cell),
                 Paragraph(task_name, ParagraphStyle("tn", fontName=FONT_REG, fontSize=FONT_SIZE)),
                 *[_fmt_hrs(inv_data.get(inv)) for inv in all_invoices],
                 Paragraph(f"<b>{_fmt_hrs(row_total)}</b>", ps_num_bold),
