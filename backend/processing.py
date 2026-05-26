@@ -1,0 +1,307 @@
+import io
+from datetime import date
+from typing import Any
+import openpyxl
+
+# ---------------------------------------------------------------------------
+# Column name aliases — keys are internal field names, values are lists of
+# header strings to match (case-insensitive, whitespace-normalized).
+# The first alias that matches a header cell wins.
+# ---------------------------------------------------------------------------
+
+PREBILL_ALIASES: dict[str, list[str]] = {
+    "employee":   ["employee / vendor / client", "employee/vendor/client", "employee",
+                   "staff", "person", "name", "vendor", "client"],
+    "date":       ["transaction date", "trans date", "date", "work date", "service date"],
+    "task":       ["task", "task #", "task number", "task code", "task id"],
+    "org":        ["organization", "org.", "org", "department", "dept", "cost center"],
+    "hours":      ["bill", "bill hours", "billed hours", "hours billed",
+                   "hrs billed", "quantity", "qty", "units"],
+    "cost":       ["bill effort", "billed amount", "bill amount", "billing amount",
+                   "amount", "cost", "total cost", "extended cost"],
+}
+
+MASTER_ALIASES: dict[str, list[str]] = {
+    "personnel":      ["personnel", "employee", "person", "staff", "name"],
+    "phase":          ["phase name", "phase"],
+    "task":           ["task", "task #", "task number", "task code"],
+    "task_name":      ["task name", "task description", "description", "name"],
+    "invoice_number": ["invoice #", "invoice number", "invoice no", "invoice", "inv #", "inv no", "inv"],
+    "hours":          ["hours", "hrs", "quantity", "qty", "units"],
+    "adjusted_cost":  ["cost adjusted to match ecms invoice", "cost adjusted", "adjusted cost",
+                       "adj cost", "ecms cost", "adjusted billing"],
+    "cost":           ["cost", "bill effort", "billed amount", "amount", "original cost"],
+}
+
+
+def _normalize(s: str) -> str:
+    return " ".join(str(s).lower().split())
+
+
+def _detect_columns(ws, aliases: dict[str, list[str]]) -> tuple[dict[str, int], list[str]]:
+    """
+    Scan the first non-empty row for header cells and map field names to
+    1-based column indices. Returns (col_map, warnings).
+    """
+    # Find the header row — first row that has at least 3 non-empty cells
+    header_row = 1
+    for r in range(1, min(6, ws.max_row + 1)):
+        non_empty = sum(1 for c in range(1, ws.max_column + 1) if ws.cell(r, c).value)
+        if non_empty >= 3:
+            header_row = r
+            break
+
+    # Build a map of normalized header text → column index
+    header_map: dict[str, int] = {}
+    for col in range(1, ws.max_column + 1):
+        val = ws.cell(header_row, col).value
+        if val is not None:
+            header_map[_normalize(val)] = col
+
+    col_map: dict[str, int] = {}
+    warnings: list[str] = []
+
+    for field, alias_list in aliases.items():
+        matched = False
+        for alias in alias_list:
+            norm = _normalize(alias)
+            if norm in header_map:
+                col_map[field] = header_map[norm]
+                matched = True
+                break
+        if not matched:
+            # Try partial / contains match as a last resort
+            for alias in alias_list:
+                norm = _normalize(alias)
+                for header_text, col_idx in header_map.items():
+                    if norm in header_text or header_text in norm:
+                        col_map[field] = col_idx
+                        matched = True
+                        break
+                if matched:
+                    break
+        if not matched:
+            warnings.append(f"Column not found for field '{field}' — tried: {alias_list[:3]}")
+
+    return col_map, warnings, header_row
+
+
+def format_name(raw: str) -> str:
+    """'08312 - Travis C Arentz' → 'T. Arentz'"""
+    # Handle "NNNNN - Name" format
+    if " - " in raw:
+        name_part = raw.split(" - ", 1)[1]
+    else:
+        name_part = raw
+    parts = name_part.strip().split()
+    if len(parts) < 2:
+        return name_part.strip()
+    return f"{parts[0][0]}. {parts[-1]}"
+
+
+def parse_task(raw: str) -> tuple[str, str]:
+    """
+    '100.T102 - Engineering Support' → ('T102', 'Engineering Support')
+    'T102 - Engineering Support'    → ('T102', 'Engineering Support')
+    'T102'                          → ('T102', '')
+    """
+    # Strip leading numeric prefix like "100."
+    if "." in raw:
+        after_dot = raw.split(".", 1)[1]
+    else:
+        after_dot = raw
+
+    if " - " in after_dot:
+        code, _, name = after_dot.partition(" - ")
+    else:
+        code, name = after_dot, ""
+    return code.strip(), name.strip()
+
+
+def get_phase(organization: str) -> str:
+    return "Bridge" if "bridge" in organization.lower() else "Highway"
+
+
+def _get_sheet(wb, preferred_name: str):
+    if preferred_name in wb.sheetnames:
+        return wb[preferred_name]
+    return wb[wb.sheetnames[0]]
+
+
+def parse_prebill(file_bytes: bytes) -> list[dict]:
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    ws = _get_sheet(wb, "Bill Item Summaries")
+
+    col_map, warnings, header_row = _detect_columns(ws, PREBILL_ALIASES)
+
+    required = ["employee", "task", "org", "hours", "cost"]
+    missing = [f for f in required if f not in col_map]
+    if missing:
+        raise ValueError(
+            f"Prebill file is missing required columns: {missing}. "
+            f"Detection warnings: {warnings}"
+        )
+
+    rows = []
+    for row_idx in range(header_row + 1, ws.max_row + 1):
+        employee = ws.cell(row_idx, col_map["employee"]).value
+        task_field = ws.cell(row_idx, col_map["task"]).value
+        org = ws.cell(row_idx, col_map["org"]).value
+        hours = ws.cell(row_idx, col_map["hours"]).value
+        cost = ws.cell(row_idx, col_map["cost"]).value
+
+        # Skip blank/total rows — require at minimum employee, task, and a numeric cost
+        if not employee or not task_field or not org:
+            continue
+        try:
+            hours = float(hours)
+            cost = float(cost)
+        except (TypeError, ValueError):
+            continue
+
+        trans_date = None
+        if "date" in col_map:
+            raw_date = ws.cell(row_idx, col_map["date"]).value
+            if raw_date is not None:
+                trans_date = raw_date.date() if hasattr(raw_date, "date") else raw_date
+
+        personnel = format_name(str(employee))
+        phase = get_phase(str(org))
+        task_code, task_name = parse_task(str(task_field))
+
+        rows.append({
+            "personnel": personnel,
+            "phase": phase,
+            "task": task_code,
+            "task_name": task_name,
+            "hours": hours,
+            "cost": cost,
+            "transaction_date": trans_date,
+        })
+
+    return rows
+
+
+def apply_cost_adjustment(rows: list[dict], ecms_total: float) -> list[dict]:
+    prebill_total = sum(r["cost"] for r in rows)
+    if prebill_total == 0:
+        raise ValueError("Prebill total is zero — cannot apply cost adjustment.")
+    factor = ecms_total / prebill_total
+    for r in rows:
+        r["adjusted_cost"] = r["cost"] * factor
+    return rows
+
+
+def read_master(file_bytes: bytes) -> list[dict]:
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    ws = _get_sheet(wb, "Sheet1")
+
+    col_map, warnings, header_row = _detect_columns(ws, MASTER_ALIASES)
+
+    # Master is optional to read (used only for page 2 history), so warn but don't fail
+    rows = []
+    if "personnel" not in col_map:
+        return rows
+
+    for row_idx in range(header_row + 1, ws.max_row + 1):
+        personnel = ws.cell(row_idx, col_map["personnel"]).value
+        if not personnel:
+            continue
+
+        def get(field):
+            return ws.cell(row_idx, col_map[field]).value if field in col_map else None
+
+        rows.append({
+            "personnel": personnel,
+            "phase":          get("phase"),
+            "task":           get("task"),
+            "task_name":      get("task_name"),
+            "invoice_number": get("invoice_number"),
+            "hours":          get("hours"),
+            "adjusted_cost":  get("adjusted_cost"),
+            "cost":           get("cost"),
+        })
+    return rows
+
+
+def append_to_master(master_bytes: bytes, new_rows: list[dict], invoice_number: int) -> bytes:
+    wb = openpyxl.load_workbook(io.BytesIO(master_bytes))
+    ws = _get_sheet(wb, "Sheet1")
+
+    # Detect master column layout so we write into the right columns
+    col_map, _, header_row = _detect_columns(ws, MASTER_ALIASES)
+
+    # Fallback to known column positions if detection fails
+    defaults = {
+        "personnel": 1, "phase": 3, "task": 4, "task_name": 5,
+        "invoice_number": 13, "hours": 15, "adjusted_cost": 18, "cost": 19,
+    }
+    for field, default_col in defaults.items():
+        if field not in col_map:
+            col_map[field] = default_col
+
+    # Find first empty data row
+    next_row = ws.max_row + 1
+    while next_row > header_row + 1 and ws.cell(next_row - 1, col_map["personnel"]).value is None:
+        next_row -= 1
+
+    for r in new_rows:
+        ws.cell(next_row, col_map["personnel"]).value    = r["personnel"]
+        ws.cell(next_row, col_map["phase"]).value        = r["phase"]
+        ws.cell(next_row, col_map["task"]).value         = r["task"]
+        ws.cell(next_row, col_map["task_name"]).value    = r["task_name"]
+        ws.cell(next_row, col_map["invoice_number"]).value = invoice_number
+        ws.cell(next_row, col_map["hours"]).value        = r["hours"]
+        ws.cell(next_row, col_map["adjusted_cost"]).value = r["adjusted_cost"]
+        ws.cell(next_row, col_map["cost"]).value         = r["cost"]
+        next_row += 1
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def validate(
+    new_rows: list[dict],
+    invoice_start: date,
+    invoice_end: date,
+    ecms_total: float,
+) -> tuple[bool, list[dict]]:
+    items = []
+
+    # 1. All dates within invoice period
+    out_of_range = [
+        r for r in new_rows
+        if r.get("transaction_date")
+        and not (invoice_start <= r["transaction_date"] <= invoice_end)
+    ]
+    if out_of_range:
+        for r in out_of_range:
+            items.append({"passed": False, "message": f"Date out of range: {r['personnel']} / {r['task']} on {r['transaction_date']}"})
+    else:
+        items.append({"passed": True, "message": "All transaction dates are within the invoice period."})
+
+    # 2. No duplicate (personnel + task + date)
+    seen: set[tuple[Any, Any, Any]] = set()
+    dupes = []
+    for r in new_rows:
+        key = (r["personnel"], r["task"], r.get("transaction_date"))
+        if key in seen:
+            dupes.append(key)
+        seen.add(key)
+    if dupes:
+        for d in dupes:
+            items.append({"passed": False, "message": f"Duplicate entry: {d[0]} / {d[1]} on {d[2]}"})
+    else:
+        items.append({"passed": True, "message": "No duplicate entries detected."})
+
+    # 3. Adjusted cost total matches ECMS total
+    total_adjusted = sum(r.get("adjusted_cost", 0) for r in new_rows)
+    diff = abs(total_adjusted - ecms_total)
+    if diff > 0.02:
+        items.append({"passed": False, "message": f"Adjusted total ${total_adjusted:,.2f} does not match ECMS total ${ecms_total:,.2f} (diff ${diff:.4f})."})
+    else:
+        items.append({"passed": True, "message": f"Adjusted total matches ECMS invoice total (${ecms_total:,.2f})."})
+
+    passed = all(i["passed"] for i in items)
+    return passed, items
