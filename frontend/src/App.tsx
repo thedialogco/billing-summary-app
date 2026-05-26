@@ -8,12 +8,11 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("generate");
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
+    <div className="min-h-screen bg-brand-50">
+      <header className="bg-brand-700 shadow-md">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">BSG</div>
-            <span className="font-semibold text-gray-800">Billing Summary Generator</span>
+            <span className="font-semibold text-white">Billing Summary Generator</span>
           </div>
           <nav className="flex gap-1">
             {(["generate", "settings"] as Tab[]).map((t) => (
@@ -22,8 +21,8 @@ export default function App() {
                 onClick={() => setTab(t)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   tab === t
-                    ? "bg-blue-100 text-blue-700"
-                    : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                    ? "bg-white text-brand-700"
+                    : "text-white/70 hover:text-white hover:bg-brand-800"
                 }`}
               >
                 {t === "generate" ? "Generate" : "Settings"}

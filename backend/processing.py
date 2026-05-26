@@ -283,7 +283,7 @@ def _clean_xlsx(raw: bytes) -> bytes:
 
 def append_to_master(master_bytes: bytes, new_rows: list[dict], invoice_number: int) -> bytes:
     # keep_links=False drops external link references that openpyxl can't round-trip cleanly
-    wb = openpyxl.load_workbook(io.BytesIO(master_bytes), keep_links=False)
+    wb = openpyxl.load_workbook(io.BytesIO(master_bytes), data_only=True, keep_links=False)
     ws = _get_sheet(wb, "Sheet1")
 
     # Detect master column layout so we write into the right columns

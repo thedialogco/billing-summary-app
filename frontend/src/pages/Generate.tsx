@@ -26,7 +26,7 @@ function CurrencyInput({
         const raw = e.target.value.replace(/[^0-9.]/g, "");
         onChange(raw);
       }}
-      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-700"
     />
   );
 }
@@ -59,10 +59,10 @@ function FileField({
         onDrop={handleDrop}
         className={`border-2 border-dashed rounded-lg px-4 py-6 text-center cursor-pointer transition-colors
           ${dragging
-            ? "border-blue-500 bg-blue-50"
+            ? "border-brand-700 bg-brand-50"
             : file
               ? "border-green-400 bg-green-50"
-              : "border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+              : "border-gray-300 hover:border-brand-700 hover:bg-brand-50"
           }`}
       >
         {file ? (
@@ -74,7 +74,7 @@ function FileField({
         ) : (
           <div>
             <div className="text-gray-300 text-2xl mb-1">⬆</div>
-            <span className="text-sm text-gray-500">Drag & drop or <span className="text-blue-600 font-medium">click to browse</span></span>
+            <span className="text-sm text-gray-500">Drag & drop or <span className="text-brand-700 font-medium">click to browse</span></span>
           </div>
         )}
       </div>
@@ -185,7 +185,7 @@ export default function Generate() {
             <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-700"
             >
               <option value="">— Select a project —</option>
               {projects.map((p) => (
@@ -237,7 +237,7 @@ export default function Generate() {
                 value={invoiceNumber}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
                 placeholder="e.g. 1, 2, 3..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-700"
               />
             </div>
             <div>
@@ -254,7 +254,7 @@ export default function Generate() {
                 type="date"
                 value={invoiceStart}
                 onChange={(e) => setInvoiceStart(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-700"
               />
             </div>
             <div>
@@ -263,7 +263,7 @@ export default function Generate() {
                 type="date"
                 value={invoiceEnd}
                 onChange={(e) => setInvoiceEnd(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-700"
               />
             </div>
           </div>
@@ -278,7 +278,7 @@ export default function Generate() {
         <button
           type="submit"
           disabled={!canSubmit || loading}
-          className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full bg-brand-700 text-white py-3 rounded-xl font-semibold text-sm hover:bg-brand-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? "Generating…" : "Generate Billing Summary"}
         </button>
@@ -291,7 +291,7 @@ export default function Generate() {
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={() => downloadBase64(result.pdf_b64, `${invoiceLabel}_Billing_Summary.pdf`, "application/pdf")}
-              className="bg-white border-2 border-blue-600 text-blue-700 py-3 rounded-xl font-semibold text-sm hover:bg-blue-50 transition-colors"
+              className="bg-white border-2 border-brand-700 text-brand-700 py-3 rounded-xl font-semibold text-sm hover:bg-brand-50 transition-colors"
             >
               Download PDF Report
             </button>

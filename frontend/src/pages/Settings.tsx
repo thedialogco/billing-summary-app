@@ -76,7 +76,7 @@ export default function Settings() {
         </div>
         <button
           onClick={startAdd}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
+          className="bg-brand-700 text-white px-4 py-2 rounded-lg hover:bg-brand-800 text-sm font-medium"
         >
           + Add Project
         </button>
@@ -128,7 +128,7 @@ export default function Settings() {
                       <button
                         onClick={save}
                         disabled={saving}
-                        className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs font-medium disabled:opacity-50"
+                        className="text-white bg-brand-700 hover:bg-brand-800 px-3 py-1 rounded text-xs font-medium disabled:opacity-50"
                       >
                         Save
                       </button>
@@ -145,7 +145,7 @@ export default function Settings() {
                     <td className="px-4 py-3 text-right space-x-3">
                       <button
                         onClick={() => startEdit(p)}
-                        className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                        className="text-brand-700 hover:text-brand-900 text-xs font-medium"
                       >
                         Edit
                       </button>
@@ -170,7 +170,7 @@ export default function Settings() {
             )}
 
             {adding && (
-              <tr className="bg-blue-50 border-b border-gray-100">
+              <tr className="bg-brand-50 border-b border-gray-100">
                 <td className="px-3 py-2">
                   <input
                     autoFocus
@@ -200,7 +200,7 @@ export default function Settings() {
                   <button
                     onClick={save}
                     disabled={saving || !form.name}
-                    className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs font-medium disabled:opacity-50"
+                    className="text-white bg-brand-700 hover:bg-brand-800 px-3 py-1 rounded text-xs font-medium disabled:opacity-50"
                   >
                     Add
                   </button>
