@@ -225,6 +225,62 @@ def read_master(file_bytes: bytes) -> list[dict]:
     return rows
 
 
+CURRENCY_FMT = '"$"#,##0.00'
+
+
+def _clean_xlsx(raw: bytes) -> bytes:
+    """
+    Remove content that causes Excel's 'unsafe links' / repair dialog:
+      - xl/externalLinks/ folder and all entries inside it
+      - xl/calcChain.xml  (becomes stale after row appends)
+    Also patches [Content_Types].xml and xl/_rels/workbook.xml.rels
+    to remove dangling references to both.
+    """
+    import re
+
+    skip_prefixes = ("xl/externalLinks/", "xl/calcChain.xml")
+
+    with zipfile.ZipFile(io.BytesIO(raw), "r") as zin:
+        names = zin.namelist()
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in names:
+                if any(item.startswith(p) or item == p for p in skip_prefixes):
+                    continue
+
+                content_bytes = zin.read(item)
+
+                if item == "[Content_Types].xml":
+                    content = content_bytes.decode()
+                    # Remove Override entries for calcChain and externalLinks
+                    content = re.sub(
+                        r'<Override[^/]*/xl/calcChain\.xml[^/]*/>', "", content)
+                    content = re.sub(
+                        r'<Override[^>]*/xl/externalLinks/[^>]*/>', "", content)
+                    content_bytes = content.encode()
+
+                elif item == "xl/_rels/workbook.xml.rels":
+                    content = content_bytes.decode()
+                    # Remove Relationship entries for externalLink and calcChain
+                    content = re.sub(
+                        r'<Relationship[^>]+/relationships/externalLink[^>]*/>', "", content)
+                    content = re.sub(
+                        r'<Relationship[^>]+/relationships/calcChain[^>]*/>', "", content)
+                    content_bytes = content.encode()
+
+                elif item == "xl/workbook.xml":
+                    content = content_bytes.decode()
+                    # Remove <externalReferences> block if present
+                    content = re.sub(
+                        r'<externalReferences>.*?</externalReferences>', "", content,
+                        flags=re.DOTALL)
+                    content_bytes = content.encode()
+
+                zout.writestr(item, content_bytes)
+
+    return out.getvalue()
+
+
 def append_to_master(master_bytes: bytes, new_rows: list[dict], invoice_number: int) -> bytes:
     # keep_links=False drops external link references that openpyxl can't round-trip cleanly
     wb = openpyxl.load_workbook(io.BytesIO(master_bytes), keep_links=False)
@@ -248,41 +304,26 @@ def append_to_master(master_bytes: bytes, new_rows: list[dict], invoice_number: 
         next_row -= 1
 
     for r in new_rows:
-        ws.cell(next_row, col_map["personnel"]).value    = r["personnel"]
-        ws.cell(next_row, col_map["phase"]).value        = r["phase"]
-        ws.cell(next_row, col_map["task"]).value         = r["task"]
-        ws.cell(next_row, col_map["task_name"]).value    = r["task_name"]
+        ws.cell(next_row, col_map["personnel"]).value      = r["personnel"]
+        ws.cell(next_row, col_map["phase"]).value          = r["phase"]
+        ws.cell(next_row, col_map["task"]).value           = r["task"]
+        ws.cell(next_row, col_map["task_name"]).value      = r["task_name"]
         ws.cell(next_row, col_map["invoice_number"]).value = invoice_number
-        ws.cell(next_row, col_map["hours"]).value        = r["hours"]
-        ws.cell(next_row, col_map["adjusted_cost"]).value = r["adjusted_cost"]
-        ws.cell(next_row, col_map["cost"]).value         = r["cost"]
+        ws.cell(next_row, col_map["hours"]).value          = r["hours"]
+
+        adj_cell = ws.cell(next_row, col_map["adjusted_cost"])
+        adj_cell.value         = round(r["adjusted_cost"], 2)
+        adj_cell.number_format = CURRENCY_FMT
+
+        cost_cell = ws.cell(next_row, col_map["cost"])
+        cost_cell.value         = round(r["cost"], 2)
+        cost_cell.number_format = CURRENCY_FMT
+
         next_row += 1
 
     buf = io.BytesIO()
     wb.save(buf)
-
-    # Remove calcChain.xml — it becomes stale after appending rows and
-    # causes Excel's "We found a problem" repair dialog on open.
-    raw = buf.getvalue()
-    with zipfile.ZipFile(io.BytesIO(raw), "r") as zin:
-        names = zin.namelist()
-        if "xl/calcChain.xml" not in names:
-            return raw
-        out = io.BytesIO()
-        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
-            for item in names:
-                if item == "xl/calcChain.xml":
-                    continue
-                if item == "[Content_Types].xml":
-                    content = zin.read(item).decode()
-                    content = content.replace(
-                        '<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>',
-                        ""
-                    )
-                    zout.writestr(item, content)
-                else:
-                    zout.writestr(item, zin.read(item))
-    return out.getvalue()
+    return _clean_xlsx(buf.getvalue())
 
 
 def validate(
