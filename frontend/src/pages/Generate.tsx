@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, downloadBase64 } from "../api";
+import { api, downloadBase64, projectStorage } from "../api";
 import type { GenerateResponse, Project, ValidationResult, ValidationItem } from "../api";
 
 function formatCurrency(raw: string): string {
@@ -130,7 +130,7 @@ export default function Generate() {
   const [result, setResult] = useState<GenerateResponse | null>(null);
 
   useEffect(() => {
-    api.projects.list().then(setProjects).catch(() => {});
+    setProjects(projectStorage.list());
   }, []);
 
   const canSubmit =
@@ -148,7 +148,8 @@ export default function Generate() {
     const form = new FormData();
     form.append("prebill_file", prebillFile!);
     form.append("master_file", masterFile!);
-    form.append("project_id", projectId);
+    form.append("agreement_number", selectedProject!.agreement_number);
+    form.append("work_order_number", selectedProject!.work_order_number);
     form.append("invoice_number", invoiceNumber);
     form.append("invoice_start", invoiceStart);
     form.append("invoice_end", invoiceEnd);

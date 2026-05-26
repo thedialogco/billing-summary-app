@@ -24,6 +24,55 @@ export interface GenerateResponse {
   validation: ValidationResult;
 }
 
+// ---------------------------------------------------------------------------
+// Project storage — saved in the browser (localStorage)
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY = "bsg_projects";
+
+function loadProjects(): Project[] {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveProjects(projects: Project[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+}
+
+export const projectStorage = {
+  list: (): Project[] => loadProjects(),
+
+  create: (data: Omit<Project, "id" | "created_at">): Project => {
+    const projects = loadProjects();
+    const next: Project = {
+      ...data,
+      id: Date.now(),
+      created_at: new Date().toISOString(),
+    };
+    saveProjects([...projects, next]);
+    return next;
+  },
+
+  update: (id: number, data: Partial<Omit<Project, "id" | "created_at">>): Project => {
+    const projects = loadProjects().map((p) =>
+      p.id === id ? { ...p, ...data } : p
+    );
+    saveProjects(projects);
+    return projects.find((p) => p.id === id)!;
+  },
+
+  delete: (id: number): void => {
+    saveProjects(loadProjects().filter((p) => p.id !== id));
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Generate API
+// ---------------------------------------------------------------------------
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
@@ -35,24 +84,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  projects: {
-    list: () => request<Project[]>("/api/projects"),
-    create: (data: Omit<Project, "id" | "created_at">) =>
-      request<Project>("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      }),
-    update: (id: number, data: Partial<Omit<Project, "id" | "created_at">>) =>
-      request<Project>(`/api/projects/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      }),
-    delete: (id: number) =>
-      request<void>(`/api/projects/${id}`, { method: "DELETE" }),
-  },
-
   generate: (form: FormData) =>
     request<GenerateResponse>("/api/generate", { method: "POST", body: form }),
 };

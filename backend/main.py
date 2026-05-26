@@ -2,20 +2,16 @@ import base64
 import os
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
-from database import engine, get_db, Base
-from models import Project, ProjectCreate, ProjectUpdate, ProjectRead, ValidationResult, ValidationItem, GenerateResponse
 from processing import parse_prebill, apply_cost_adjustment, read_master, append_to_master, validate
 from pdf_generator import generate_pdf
 
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Billing Summary Generator")
 
@@ -30,64 +26,33 @@ app.add_middleware(
 )
 
 
-# ---------------------------------------------------------------------------
-# Projects (settings)
-# ---------------------------------------------------------------------------
-
-@app.get("/api/projects", response_model=list[ProjectRead])
-def list_projects(db: Session = Depends(get_db)):
-    return db.query(Project).order_by(Project.name).all()
+class ValidationItem(BaseModel):
+    passed: bool
+    message: str
 
 
-@app.post("/api/projects", response_model=ProjectRead, status_code=201)
-def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
-    project = Project(**payload.model_dump())
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-    return project
+class ValidationResult(BaseModel):
+    passed: bool
+    items: list[ValidationItem]
 
 
-@app.put("/api/projects/{project_id}", response_model=ProjectRead)
-def update_project(project_id: int, payload: ProjectUpdate, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    for field, value in payload.model_dump(exclude_none=True).items():
-        setattr(project, field, value)
-    db.commit()
-    db.refresh(project)
-    return project
+class GenerateResponse(BaseModel):
+    pdf_b64: str
+    master_xlsx_b64: str
+    validation: ValidationResult
 
-
-@app.delete("/api/projects/{project_id}", status_code=204)
-def delete_project(project_id: int, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    db.delete(project)
-    db.commit()
-
-
-# ---------------------------------------------------------------------------
-# Generate billing summary
-# ---------------------------------------------------------------------------
 
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate(
     prebill_file: UploadFile = File(...),
     master_file: UploadFile = File(...),
-    project_id: int = Form(...),
+    agreement_number: str = Form(...),
+    work_order_number: str = Form(...),
     invoice_number: int = Form(...),
     invoice_start: date = Form(...),
     invoice_end: date = Form(...),
     ecms_total: float = Form(...),
-    db: Session = Depends(get_db),
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
     prebill_bytes = await prebill_file.read()
     master_bytes = await master_file.read()
 
@@ -120,8 +85,8 @@ async def generate(
         pdf_bytes = generate_pdf(
             new_rows=new_rows,
             master_rows=master_rows,
-            agreement_number=project.agreement_number,
-            work_order_number=project.work_order_number,
+            agreement_number=agreement_number,
+            work_order_number=work_order_number,
             invoice_number=invoice_number,
             invoice_start=invoice_start,
             invoice_end=invoice_end,

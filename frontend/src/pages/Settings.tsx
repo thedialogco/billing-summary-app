@@ -1,24 +1,14 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { projectStorage } from "../api";
 import type { Project } from "../api";
 
 export default function Settings() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [error, setError] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ name: "", agreement_number: "", work_order_number: "" });
   const [adding, setAdding] = useState(false);
-  const [saving, setSaving] = useState(false);
 
-  useEffect(() => { load(); }, []);
-
-  async function load() {
-    try {
-      setProjects(await api.projects.list());
-    } catch (e: any) {
-      setError(e.message);
-    }
-  }
+  useEffect(() => { setProjects(projectStorage.list()); }, []);
 
   function startEdit(p: Project) {
     setEditId(p.id);
@@ -31,41 +21,27 @@ export default function Settings() {
     setForm({ name: "", agreement_number: "", work_order_number: "" });
   }
 
-  async function save() {
-    setSaving(true);
-    try {
-      if (editId !== null) {
-        await api.projects.update(editId, form);
-      } else {
-        await api.projects.create(form);
-      }
-      setEditId(null);
-      setAdding(false);
-      await load();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
+  function save() {
+    if (editId !== null) {
+      projectStorage.update(editId, form);
+    } else {
+      projectStorage.create(form);
     }
+    setEditId(null);
+    setAdding(false);
+    setProjects(projectStorage.list());
   }
 
-  async function remove(id: number) {
+  function remove(id: number) {
     if (!confirm("Delete this project?")) return;
-    try {
-      await api.projects.delete(id);
-      await load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+    projectStorage.delete(id);
+    setProjects(projectStorage.list());
   }
 
   function cancel() {
     setEditId(null);
     setAdding(false);
-    setError("");
   }
-
-  const isEditing = (id: number) => editId === id;
 
   return (
     <div>
@@ -82,12 +58,6 @@ export default function Settings() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">
-          {error}
-        </div>
-      )}
-
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -101,7 +71,7 @@ export default function Settings() {
           <tbody>
             {projects.map((p) => (
               <tr key={p.id} className="border-b border-gray-100 last:border-0">
-                {isEditing(p.id) ? (
+                {editId === p.id ? (
                   <>
                     <td className="px-3 py-2">
                       <input
@@ -127,8 +97,7 @@ export default function Settings() {
                     <td className="px-3 py-2 text-right space-x-2">
                       <button
                         onClick={save}
-                        disabled={saving}
-                        className="text-white bg-brand-700 hover:bg-brand-800 px-3 py-1 rounded text-xs font-medium disabled:opacity-50"
+                        className="text-white bg-brand-700 hover:bg-brand-800 px-3 py-1 rounded text-xs font-medium"
                       >
                         Save
                       </button>
@@ -199,7 +168,7 @@ export default function Settings() {
                 <td className="px-3 py-2 text-right space-x-2">
                   <button
                     onClick={save}
-                    disabled={saving || !form.name}
+                    disabled={!form.name}
                     className="text-white bg-brand-700 hover:bg-brand-800 px-3 py-1 rounded text-xs font-medium disabled:opacity-50"
                   >
                     Add
