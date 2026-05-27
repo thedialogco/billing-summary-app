@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 from datetime import date
 from pathlib import Path
@@ -52,12 +53,19 @@ async def generate(
     invoice_start: date = Form(...),
     invoice_end: date = Form(...),
     ecms_total: float = Form(...),
+    personnel_json: str = Form(default="[]"),
+    tasks_json: str = Form(default="[]"),
 ):
     prebill_bytes = await prebill_file.read()
     master_bytes = await master_file.read()
 
+    personnel_phase = {p["name"].lower().strip(): p["phase"]
+                       for p in json.loads(personnel_json)}
+    task_desc = {t["code"]: t["description"]
+                 for t in json.loads(tasks_json)}
+
     try:
-        new_rows = parse_prebill(prebill_bytes)
+        new_rows = parse_prebill(prebill_bytes, personnel_phase, task_desc)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Failed to parse Prebill Data: {e}")
 

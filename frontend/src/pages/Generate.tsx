@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, downloadBase64, projectStorage } from "../api";
+import { api, downloadBase64, projectStorage, personnelStorage, taskStorage } from "../api";
 import type { GenerateResponse, Project, ValidationResult, ValidationItem } from "../api";
 
 function formatCurrency(raw: string): string {
@@ -154,6 +154,8 @@ export default function Generate() {
     form.append("invoice_start", invoiceStart);
     form.append("invoice_end", invoiceEnd);
     form.append("ecms_total", ecmsTotal);
+    form.append("personnel_json", JSON.stringify(personnelStorage.list()));
+    form.append("tasks_json", JSON.stringify(taskStorage.list()));
 
     try {
       const res = await api.generate(form);

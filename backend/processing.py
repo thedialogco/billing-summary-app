@@ -11,15 +11,15 @@ import openpyxl
 # ---------------------------------------------------------------------------
 
 PREBILL_ALIASES: dict[str, list[str]] = {
-    "employee":   ["employee / vendor / client", "employee/vendor/client", "employee",
-                   "staff", "person", "name", "vendor", "client"],
-    "date":       ["transaction date", "trans date", "date", "work date", "service date"],
+    "employee":   ["name", "employee / vendor / client", "employee/vendor/client", "employee",
+                   "staff", "person", "vendor", "client"],
+    "date":       ["date", "transaction date", "trans date", "work date", "service date"],
     "task":       ["task", "task #", "task number", "task code", "task id"],
     "org":        ["organization", "org.", "org", "department", "dept", "cost center"],
-    "hours":      ["bill", "bill hours", "billed hours", "hours billed",
+    "hours":      ["hours", "hrs", "bill", "bill hours", "billed hours", "hours billed",
                    "hrs billed", "quantity", "qty", "units"],
-    "cost":       ["bill effort", "billed amount", "bill amount", "billing amount",
-                   "amount", "cost", "total cost", "extended cost"],
+    "cost":       ["invoice amount", "billing extension", "bill effort", "billed amount",
+                   "bill amount", "billing amount", "amount", "cost", "total cost", "extended cost"],
 }
 
 MASTER_ALIASES: dict[str, list[str]] = {
@@ -88,35 +88,51 @@ def _detect_columns(ws, aliases: dict[str, list[str]]) -> tuple[dict[str, int], 
 
 
 def format_name(raw: str) -> str:
-    """'08312 - Travis C Arentz' → 'T. Arentz'"""
-    # Handle "NNNNN - Name" format
+    """
+    'Arentz, Travis'           → 'T. Arentz'   (new Last, First format)
+    '08312 - Travis C Arentz'  → 'T. Arentz'   (old NNNNN - Name format)
+    """
+    raw = str(raw).strip()
+    if "," in raw:
+        last, _, first_part = raw.partition(",")
+        first_word = first_part.strip().split()[0] if first_part.strip() else ""
+        if first_word:
+            return f"{first_word[0]}. {last.strip()}"
+        return last.strip()
     if " - " in raw:
-        name_part = raw.split(" - ", 1)[1]
-    else:
-        name_part = raw
-    parts = name_part.strip().split()
+        raw = raw.split(" - ", 1)[1]
+    parts = raw.strip().split()
     if len(parts) < 2:
-        return name_part.strip()
+        return raw.strip()
     return f"{parts[0][0]}. {parts[-1]}"
 
 
-def parse_task(raw: str) -> tuple[str, str]:
+def parse_task(raw: str, task_desc: dict | None = None) -> tuple[str, str]:
     """
+    '0046'                           → ('0046', task_desc.get('0046', ''))
     '100.T102 - Engineering Support' → ('T102', 'Engineering Support')
-    'T102 - Engineering Support'    → ('T102', 'Engineering Support')
-    'T102'                          → ('T102', '')
+    'T102 - Engineering Support'     → ('T102', 'Engineering Support')
+    'T102'                           → ('T102', task_desc.get('T102', ''))
     """
-    # Strip leading numeric prefix like "100."
-    if "." in raw:
-        after_dot = raw.split(".", 1)[1]
-    else:
-        after_dot = raw
+    task_desc = task_desc or {}
+    raw = str(raw).strip()
 
-    if " - " in after_dot:
+    # Old embedded format: contains " - " after optional numeric prefix
+    if " - " in raw:
+        after_dot = raw.split(".", 1)[1] if ("." in raw and not raw.replace(".", "").isdigit()) else raw
         code, _, name = after_dot.partition(" - ")
-    else:
-        code, name = after_dot, ""
-    return code.strip(), name.strip()
+        code = code.strip()
+        name = name.strip() or task_desc.get(code, "")
+        return code, name
+
+    # Strip leading numeric prefix like "100." only when followed by a letter (old format)
+    if "." in raw:
+        parts = raw.split(".", 1)
+        if parts[0].isdigit() and parts[1] and not parts[1][0].isdigit():
+            raw = parts[1]
+
+    code = raw.strip()
+    return code, task_desc.get(code, "")
 
 
 def get_phase(organization: str) -> str:
@@ -129,13 +145,17 @@ def _get_sheet(wb, preferred_name: str):
     return wb[wb.sheetnames[0]]
 
 
-def parse_prebill(file_bytes: bytes) -> list[dict]:
+def parse_prebill(
+    file_bytes: bytes,
+    personnel_phase: dict | None = None,
+    task_desc: dict | None = None,
+) -> list[dict]:
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
     ws = _get_sheet(wb, "Bill Item Summaries")
 
     col_map, warnings, header_row = _detect_columns(ws, PREBILL_ALIASES)
 
-    required = ["employee", "task", "org", "hours", "cost"]
+    required = ["employee", "task", "hours", "cost"]
     missing = [f for f in required if f not in col_map]
     if missing:
         raise ValueError(
@@ -147,12 +167,10 @@ def parse_prebill(file_bytes: bytes) -> list[dict]:
     for row_idx in range(header_row + 1, ws.max_row + 1):
         employee = ws.cell(row_idx, col_map["employee"]).value
         task_field = ws.cell(row_idx, col_map["task"]).value
-        org = ws.cell(row_idx, col_map["org"]).value
         hours = ws.cell(row_idx, col_map["hours"]).value
         cost = ws.cell(row_idx, col_map["cost"]).value
 
-        # Skip blank/total rows — require at minimum employee, task, and a numeric cost
-        if not employee or not task_field or not org:
+        if not employee or not task_field:
             continue
         try:
             hours = float(hours)
@@ -167,8 +185,16 @@ def parse_prebill(file_bytes: bytes) -> list[dict]:
                 trans_date = raw_date.date() if hasattr(raw_date, "date") else raw_date
 
         personnel = format_name(str(employee))
-        phase = get_phase(str(org))
-        task_code, task_name = parse_task(str(task_field))
+
+        # Phase: use personnel lookup first, fall back to org-column detection
+        phase = None
+        if personnel_phase:
+            phase = personnel_phase.get(str(employee).lower().strip())
+        if phase is None:
+            org = ws.cell(row_idx, col_map["org"]).value if "org" in col_map else None
+            phase = get_phase(str(org)) if org else "Highway"
+
+        task_code, task_name = parse_task(str(task_field), task_desc)
 
         rows.append({
             "personnel": personnel,
