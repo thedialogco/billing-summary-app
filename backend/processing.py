@@ -329,6 +329,9 @@ def append_to_master(master_bytes: bytes, new_rows: list[dict], invoice_number: 
     while next_row > header_row + 1 and ws.cell(next_row - 1, col_map["personnel"]).value is None:
         next_row -= 1
 
+    # Ensure column R header reads correctly
+    ws.cell(header_row, col_map["adjusted_cost"]).value = "Cost Adjusted to Match ECMS Invoice"
+
     for r in new_rows:
         ws.cell(next_row, col_map["personnel"]).value      = r["personnel"]
         ws.cell(next_row, col_map["phase"]).value          = r["phase"]
@@ -340,10 +343,6 @@ def append_to_master(master_bytes: bytes, new_rows: list[dict], invoice_number: 
         adj_cell = ws.cell(next_row, col_map["adjusted_cost"])
         adj_cell.value         = round(r["adjusted_cost"], 2)
         adj_cell.number_format = CURRENCY_FMT
-
-        cost_cell = ws.cell(next_row, col_map["cost"])
-        cost_cell.value         = round(r["cost"], 2)
-        cost_cell.number_format = CURRENCY_FMT
 
         next_row += 1
 
