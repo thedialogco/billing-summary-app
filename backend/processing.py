@@ -145,13 +145,26 @@ def _get_sheet(wb, preferred_name: str):
     return wb[wb.sheetnames[0]]
 
 
+def _find_best_sheet(wb, aliases: dict[str, list[str]]):
+    """Return the worksheet whose headers best match the given aliases."""
+    best_ws = wb[wb.sheetnames[0]]
+    best_score = -1
+    for name in wb.sheetnames:
+        ws = wb[name]
+        col_map, _, _ = _detect_columns(ws, aliases)
+        if len(col_map) > best_score:
+            best_score = len(col_map)
+            best_ws = ws
+    return best_ws
+
+
 def parse_prebill(
     file_bytes: bytes,
     personnel_phase: dict | None = None,
     task_desc: dict | None = None,
 ) -> list[dict]:
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-    ws = _get_sheet(wb, "Bill Item Summaries")
+    ws = _find_best_sheet(wb, PREBILL_ALIASES)
 
     col_map, warnings, header_row = _detect_columns(ws, PREBILL_ALIASES)
 
@@ -221,7 +234,7 @@ def apply_cost_adjustment(rows: list[dict], ecms_total: float) -> list[dict]:
 
 def read_master(file_bytes: bytes) -> list[dict]:
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-    ws = _get_sheet(wb, "Sheet1")
+    ws = _find_best_sheet(wb, MASTER_ALIASES)
 
     col_map, warnings, header_row = _detect_columns(ws, MASTER_ALIASES)
 
@@ -310,7 +323,7 @@ def _clean_xlsx(raw: bytes) -> bytes:
 def append_to_master(master_bytes: bytes, new_rows: list[dict], invoice_number: int) -> bytes:
     # keep_links=False drops external link references that openpyxl can't round-trip cleanly
     wb = openpyxl.load_workbook(io.BytesIO(master_bytes), data_only=True, keep_links=False)
-    ws = _get_sheet(wb, "Sheet1")
+    ws = _find_best_sheet(wb, MASTER_ALIASES)
 
     # Detect master column layout so we write into the right columns
     col_map, _, header_row = _detect_columns(ws, MASTER_ALIASES)
