@@ -1,6 +1,6 @@
 import io
 import zipfile
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 import openpyxl
 
@@ -197,7 +197,17 @@ def parse_prebill(
         if "date" in col_map:
             raw_date = ws.cell(row_idx, col_map["date"]).value
             if raw_date is not None:
-                trans_date = raw_date.date() if hasattr(raw_date, "date") else raw_date
+                if hasattr(raw_date, "date"):
+                    trans_date = raw_date.date()
+                elif isinstance(raw_date, date):
+                    trans_date = raw_date
+                elif isinstance(raw_date, str) and raw_date.strip():
+                    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y", "%Y/%m/%d"):
+                        try:
+                            trans_date = datetime.strptime(raw_date.strip(), fmt).date()
+                            break
+                        except ValueError:
+                            continue
 
         personnel = format_name(str(employee))
 
