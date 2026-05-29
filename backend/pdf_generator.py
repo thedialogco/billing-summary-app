@@ -148,7 +148,7 @@ def _build_page1(
         Paragraph("<b>Task Name</b>", ParagraphStyle("ch", fontName=FONT_BOLD, fontSize=FONT_SIZE, textColor=WHITE)),
         *[Paragraph(f"<b>{p}</b>", ParagraphStyle("ch", fontName=FONT_BOLD, fontSize=FONT_SIZE, textColor=WHITE, alignment=TA_CENTER))
           for p in personnel_set],
-        Paragraph("<b>Hrs</b>", ParagraphStyle("ch", fontName=FONT_BOLD, fontSize=FONT_SIZE, textColor=WHITE, alignment=TA_CENTER)),
+        "",
         "",
     ]
 
@@ -323,7 +323,7 @@ def _build_page2(
     ps_header_l = ParagraphStyle("hl", fontName=FONT_BOLD, fontSize=FONT_SIZE, textColor=WHITE)
 
     header_row1 = [
-        Paragraph("<b>Sum of Hrs</b>", ps_header_l),
+        Paragraph("<b>Summary of Hours</b>", ps_header_l),
         "", "",
         Paragraph("<b>Invoice</b>", ps_header),
         *[""] * (len(all_invoices) - 1),
