@@ -151,6 +151,8 @@ def _find_best_sheet(wb, aliases: dict[str, list[str]]):
     best_score = -1
     for name in wb.sheetnames:
         ws = wb[name]
+        if not ws.max_row or ws.max_row < 2:
+            continue
         col_map, _, _ = _detect_columns(ws, aliases)
         if len(col_map) > best_score:
             best_score = len(col_map)
