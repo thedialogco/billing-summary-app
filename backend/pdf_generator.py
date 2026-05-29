@@ -126,7 +126,7 @@ def _build_page1(
 
     header_row1 = [
         Paragraph(
-            f"<b>{agreement}, {work_order}&nbsp;&nbsp;&nbsp;&nbsp;"
+            f"<b>{agreement}, WO {work_order}&nbsp;&nbsp;&nbsp;&nbsp;"
             f"Invoice Period: {_fmt_date(invoice_start)} - {_fmt_date(invoice_end)}</b>",
             ParagraphStyle("h1", fontName=FONT_BOLD, fontSize=FONT_SIZE, textColor=WHITE)
         ),
@@ -377,7 +377,7 @@ def _build_page2(
                 Paragraph(f"<b>{phase}</b>", ps_bold) if not phase_shown else "",
                 Paragraph(task, ps_cell),
                 Paragraph(task_name, ParagraphStyle("tn", fontName=FONT_REG, fontSize=FONT_SIZE)),
-                *[_fmt_hrs(inv_data.get(inv)) for inv in all_invoices],
+                *[Paragraph(_fmt_hrs(inv_data.get(inv)), ps_num) for inv in all_invoices],
                 Paragraph(f"<b>{_fmt_hrs(row_total)}</b>", ps_num_bold),
             ]
             table_data.append(row)

@@ -193,7 +193,7 @@ export default function Generate() {
               <option value="">— Select a project —</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} — Agreement {p.agreement_number}, {p.work_order_number}
+                  {p.name} — Agreement {p.agreement_number}, WO {p.work_order_number}
                 </option>
               ))}
             </select>
@@ -204,7 +204,7 @@ export default function Generate() {
           {selectedProject && (
             <div className="mt-3 flex gap-6 text-sm text-gray-600 bg-gray-50 rounded-lg px-4 py-2">
               <span><span className="font-medium">Agreement:</span> {selectedProject.agreement_number}</span>
-              <span><span className="font-medium">Work Order:</span> {selectedProject.work_order_number}</span>
+              <span><span className="font-medium">Work Order:</span> WO {selectedProject.work_order_number}</span>
             </div>
           )}
         </div>
